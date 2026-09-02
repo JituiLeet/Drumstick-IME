@@ -190,7 +190,9 @@ public class DrumstickImeService extends InputMethodService {
             });
             Intent i=new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH); i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM); sr.startListening(i);
         } catch(Exception e){ Toast.makeText(this,"设备不支持语音输入",Toast.LENGTH_SHORT).show(); } return; }
-        if(label.equals("←")){ moveCursor(-1); return; }\n        if(label.equals("→")){ moveCursor(1); return; }\n        if(label.equals("⌫")){ ic.deleteSurroundingText(1,0); return; }
+        if(label.equals("←")){ moveCursor(-1); return; }
+        if(label.equals("→")){ moveCursor(1); return; }
+        if(label.equals("⌫")){ ic.deleteSurroundingText(1,0); return; }
         if(label.equals("空格")){ if(engine.isEnglish()) commitText(" "); else { String out=engine.commitFirst(); if(out!=null&&!out.isEmpty()) commitText(out); } return; }
         if(label.equals("回车") || label.equals("↵")){ ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_ENTER)); ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_ENTER)); return; }
         if(label.equals("中/英")){ engine.setEnglish(!engine.isEnglish()); return; }
