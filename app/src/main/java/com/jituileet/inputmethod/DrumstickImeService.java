@@ -8,6 +8,7 @@ import android.media.AudioManager;
 import android.os.*;
 import android.view.*;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Toast;
 import android.widget.LinearLayout;
 import android.widget.Button;
