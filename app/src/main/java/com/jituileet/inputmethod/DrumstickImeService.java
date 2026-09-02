@@ -37,7 +37,7 @@ public class DrumstickImeService extends InputMethodService {
     @Override public void onFinishInputView(boolean finishingInput){ try{ InputConnection ic=getCurrentInputConnection(); if(ic!=null) ic.finishComposingText(); }catch(Throwable ignored){} super.onFinishInputView(finishingInput); }
     @Override public void onDestroy(){ try{ unregisterReceiver(rimeReloadReceiver); if(phoneServer!=null)phoneServer.stop(); if(engine!=null)engine.destroy(); }catch(Throwable ignored){} super.onDestroy(); }
     private boolean isChineseLanguage(){ String l=Prefs.language(this); return l.equals("zh") || (l.equals("auto") && Locale.getDefault().getLanguage().equals("zh")); }
-    @Override public void onStartInputView(View info, boolean restarting){ super.onStartInputView(info,restarting); if(view!=null) view.setVisibility(View.VISIBLE); }
+    @Override public void onStartInputView(EditorInfo info, boolean restarting){ super.onStartInputView(info,restarting); if(view!=null) view.setVisibility(View.VISIBLE); }
     @Override public View onCreateInputView(){
         view=new DrumstickKeyboardView(this);
         view.setColors(Prefs.color(this), Prefs.dark(this));
