@@ -13,6 +13,8 @@ import android.widget.Toast;
 import android.widget.LinearLayout;
 import android.widget.Button;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class DrumstickImeService extends InputMethodService {
     @Override public boolean onEvaluateFullscreenMode() { return false; }
@@ -26,20 +28,74 @@ public class DrumstickImeService extends InputMethodService {
     private boolean numericMode;
     private boolean physicalDetectionAnnounced;
     private View activePanel;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService engineExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean engineReady;
+    private volatile boolean engineInitializing;
     private final BroadcastReceiver rimeReloadReceiver = new BroadcastReceiver(){ @Override public void onReceive(Context c, Intent i){ reloadRime(); } };
 
     @Override public void onCreate(){ super.onCreate();
-        engine = new ChineseEngine(this, (cs, pre) -> { if(view!=null) view.setCandidates(cs, pre); InputConnection ic=getCurrentInputConnection(); if(ic!=null){ if(pre!=null && !pre.isEmpty() && !engine.isEnglish()) ic.setComposingText(pre,1); else ic.finishComposingText(); } });
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(rimeReloadReceiver, new IntentFilter("com.jituileet.inputmethod.RELOAD_RIME"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(rimeReloadReceiver, new IntentFilter("com.jituileet.inputmethod.RELOAD_RIME"));
-        engine.setEnglish(!isChineseLanguage());
-        phoneServer = new PhoneInputServer(this, text -> new Handler(Looper.getMainLooper()).post(() -> commitText(text)));
+        // Do not initialize/deploy Rime on the IME main thread.  Copying the
+        // bundled dictionaries and librime deployment can take long enough on
+        // Android 9 TV devices to block the IME window and trigger an ANR.
+        startEngineInitialization(false);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(rimeReloadReceiver, new IntentFilter("com.jituileet.inputmethod.RELOAD_RIME"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(rimeReloadReceiver, new IntentFilter("com.jituileet.inputmethod.RELOAD_RIME"));
+        }
+        phoneServer = new PhoneInputServer(this, text -> mainHandler.post(() -> commitText(text)));
         if(Prefs.phone(this)) phoneServer.start();
     }
+    private void startEngineInitialization(boolean reload) {
+        if (engineInitializing) return;
+        engineInitializing = true;
+        engineExecutor.execute(() -> {
+            try {
+                ChineseEngine old = engine;
+                if (reload && old != null) {
+                    try { old.destroy(); } catch (Throwable ignored) {}
+                    engine = null;
+                    engineReady = false;
+                }
+                final ChineseEngine created = new ChineseEngine(this, (cs, pre) ->
+                        mainHandler.post(() -> handleEngineUpdate(cs, pre)));
+                created.setEnglish(!isChineseLanguage());
+                engine = created;
+                engineReady = true;
+                mainHandler.post(() -> {
+                    if (view != null) {
+                        view.setCandidates(Collections.<String>emptyList(), "");
+                        view.invalidate();
+                    }
+                });
+            } catch (Throwable t) {
+                engine = null;
+                engineReady = false;
+                mainHandler.post(() -> Toast.makeText(
+                        DrumstickImeService.this,
+                        isChineseLanguage() ? "输入法引擎启动失败，请重试" : "Input engine failed to start",
+                        Toast.LENGTH_SHORT).show());
+            } finally {
+                engineInitializing = false;
+            }
+        });
+    }
+    private void handleEngineUpdate(List<String> cs, String pre) {
+        if (view != null) view.setCandidates(cs, pre);
+        InputConnection ic = getCurrentInputConnection();
+        ChineseEngine e = engine;
+        if (ic != null && e != null) {
+            if (pre != null && !pre.isEmpty() && !e.isEnglish()) ic.setComposingText(pre, 1);
+            else ic.finishComposingText();
+        }
+    }
     @Override public void onFinishInputView(boolean finishingInput){ try{ InputConnection ic=getCurrentInputConnection(); if(ic!=null) ic.finishComposingText(); }catch(Throwable ignored){} super.onFinishInputView(finishingInput); }
-    @Override public void onDestroy(){ try{ unregisterReceiver(rimeReloadReceiver); if(phoneServer!=null)phoneServer.stop(); if(engine!=null)engine.destroy(); }catch(Throwable ignored){} super.onDestroy(); }
+    @Override public void onDestroy(){ try{ unregisterReceiver(rimeReloadReceiver); if(phoneServer!=null)phoneServer.stop(); if(engine!=null)engine.destroy(); engineExecutor.shutdownNow(); }catch(Throwable ignored){} super.onDestroy(); }
     private boolean isChineseLanguage(){ String l=Prefs.language(this); return l.equals("zh") || (l.equals("auto") && Locale.getDefault().getLanguage().equals("zh")); }
     @Override public void onStartInputView(EditorInfo info, boolean restarting){ super.onStartInputView(info,restarting); if(view!=null) view.setVisibility(View.VISIBLE); }
     @Override public View onCreateInputView(){
+        setExtractViewShown(false);
         view=new DrumstickKeyboardView(this);
         view.setColors(Prefs.color(this), Prefs.dark(this));
         view.setMicVisible(hasMicrophone());
@@ -120,6 +176,7 @@ public class DrumstickImeService extends InputMethodService {
     }
     private boolean isPhysicalTextKey(int k, KeyEvent e){ return (k>=KeyEvent.KEYCODE_A && k<=KeyEvent.KEYCODE_Z) || k==KeyEvent.KEYCODE_SPACE || k==KeyEvent.KEYCODE_DEL || k==KeyEvent.KEYCODE_ENTER || k==KeyEvent.KEYCODE_SHIFT_LEFT || k==KeyEvent.KEYCODE_SHIFT_RIGHT || k==KeyEvent.KEYCODE_CAPS_LOCK || k==KeyEvent.KEYCODE_COMMA || k==KeyEvent.KEYCODE_PERIOD || k==KeyEvent.KEYCODE_APOSTROPHE || k==KeyEvent.KEYCODE_SEMICOLON || k==KeyEvent.KEYCODE_SLASH || k==KeyEvent.KEYCODE_MINUS || k==KeyEvent.KEYCODE_EQUALS || (k>=KeyEvent.KEYCODE_0 && k<=KeyEvent.KEYCODE_9); }
     private boolean handlePhysicalKey(int k, KeyEvent e){
+        if (engine == null) return false;
         if(k==KeyEvent.KEYCODE_SHIFT_LEFT||k==KeyEvent.KEYCODE_SHIFT_RIGHT){ engine.setEnglish(!engine.isEnglish()); if(view!=null)view.invalidate(); return true; }
         if(k==KeyEvent.KEYCODE_CAPS_LOCK){ caps=!caps; engine.setEnglish(true); if(view!=null)view.invalidate(); return true; }
         InputConnection ic=getCurrentInputConnection();
@@ -178,6 +235,7 @@ public class DrumstickImeService extends InputMethodService {
 
     public void press(String label){
         InputConnection ic=getCurrentInputConnection(); if(ic==null)return;
+        if (engine == null && (label.equals("中/英") || label.equals("空格") || label.equals("←") || label.equals("→") || label.equals("⌫"))) return;
         if(label.equals("Settings")) label="设置"; if(label.equals("Copy")) label="复制"; if(label.equals("Clipboard")) label="剪贴板"; if(label.equals("Voice")) label="语音"; if(label.equals("Hide")) label="隐藏"; if(label.equals("Space")) label="空格"; if(label.equals("Enter")) label="回车"; if(label.equals("Backspace")) label="⌫"; if(label.equals("Enter")) label="↵"; if(label.equals("ZH/EN")) label="中/英";
         if(label.equals("设置")){ Toast.makeText(this,isChineseLanguage()?"已打开设置":"Settings opened",Toast.LENGTH_SHORT).show(); showSettingsPanel(); return; }
         if(label.equals("隐藏")){ hideInputViewTemporarily(); return; }
@@ -251,13 +309,18 @@ public class DrumstickImeService extends InputMethodService {
     public void refreshImeView(){ if(view!=null){view.setColors(Prefs.color(this),Prefs.dark(this));view.invalidate();} }
     public void openSystemImeSettings(){ try{startActivity(new Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}catch(Throwable t){Toast.makeText(this,isChineseLanguage()?"无法打开系统设置":"Unable to open system settings",Toast.LENGTH_SHORT).show();} }
     public void commitClipboardText(String text){ if(text==null)return; InputConnection ic=getCurrentInputConnection(); if(ic!=null){ic.commitText(text,1);} }
-    public String engineChoose(int index){ return engine.choose(index); }
-    public boolean engineChangePage(boolean backward){ return engine.changePage(backward); }
+    public String engineChoose(int index){ return engine==null?null:engine.choose(index); }
+    public boolean engineChangePage(boolean backward){ return engine!=null && engine.changePage(backward); }
     public void setPhoneInput(boolean on){ Prefs.phone(this,on); if(on)phoneServer.start();else phoneServer.stop(); }
     public String phoneUrl(){ return phoneServer.getUrl(); }
     public boolean isChineseLanguagePublic(){ return isChineseLanguage(); }
     public DrumstickKeyboardView keyboardView(){ return view; }
-    public void reloadRime(){ if(engine!=null) engine.destroy(); engine=new ChineseEngine(this,(cs,pre)->{if(view!=null)view.setCandidates(cs,pre); InputConnection ic=getCurrentInputConnection(); if(ic!=null){if(pre!=null&&!pre.isEmpty()&&!engine.isEnglish()) ic.setComposingText(pre,1); else ic.finishComposingText();}}); engine.setEnglish(!isChineseLanguage()); }
+    public void reloadRime(){
+        engineReady = false;
+        engineInitializing = false;
+        if (view != null) view.setCandidates(Collections.<String>emptyList(), "");
+        startEngineInitialization(true);
+    }
     public void clearUsage(){ if(engine!=null) engine.clearUsage(); }
     public void startPhoneInput(){ if(phoneServer!=null) phoneServer.start(); }
     public void stopPhoneInput(){ if(phoneServer!=null) phoneServer.stop(); }
