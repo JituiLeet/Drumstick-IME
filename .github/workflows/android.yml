@@ -40,7 +40,12 @@ jobs:
           key: rime-${{ runner.os }}-${{ env.TRIME_REF }}-${{ hashFiles('scripts/build-rime-native.sh') }}
 
       - name: Build real liblibrime.so for TV ABIs
-        run: bash scripts/build-rime-native.sh
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          pwd
+          test -f app/src/main/cpp/drumstick_rime.cpp
+          grep -R "Drumstick-IME" -n scripts app/src/main/cpp .github || true
+          bash scripts/build-rime-native.sh
         env:
           TRIME_REF: ${{ env.TRIME_REF }}
 
