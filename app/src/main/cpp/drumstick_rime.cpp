@@ -75,7 +75,7 @@ Java_com_jituileet_inputmethod_RimeNative_nativeInitialize(JNIEnv* env, jclass, 
 
     bool maintenanceOk = true;
     if (gApi->start_maintenance) {
-        maintenanceOk = gApi->start_maintenance(True);
+        maintenanceOk = gApi->start_maintenance(true);
         if (maintenanceOk && gApi->join_maintenance_thread) {
             gApi->join_maintenance_thread();
         }
