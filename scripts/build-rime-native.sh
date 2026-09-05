@@ -43,7 +43,18 @@ p=Path(sys.argv[1]); cpp=Path(sys.argv[2]).resolve(); s=p.read_text()
 s=s.replace('cmake_minimum_required(VERSION 3.18.0)', 'cmake_minimum_required(VERSION 3.18.0)\nset(CMAKE_POSITION_INDEPENDENT_CODE ON)')
 s=s.replace('add_subdirectory(librime_jni)', '# Drumstick builds its own JNI bridge below; do not build Trime GPL JNI.')
 if 'add_library(drumstick_rime SHARED' not in s:
-    s += f'''\n\n# Drumstick JNI + statically linked librime.\nfind_library(DRUMSTICK_LOG log)\nadd_library(drumstick_rime SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../app/src/main/cpp/drumstick_rime.cpp")\ntarget_compile_features(drumstick_rime PRIVATE cxx_std_17)\ntarget_include_directories(drumstick_rime PRIVATE "${{CMAKE_CURRENT_SOURCE_DIR}}/librime/src")\ntarget_link_libraries(drumstick_rime PRIVATE "-Wl,--whole-archive" rime-static "-Wl,--no-whole-archive" ${{DRUMSTICK_LOG}})\nset_target_properties(drumstick_rime PROPERTIES\n  OUTPUT_NAME "drumstick_rime"\n  LIBRARY_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/drumstick-out")\n'''
+    s += """
+
+# Drumstick JNI + statically linked librime.
+find_library(DRUMSTICK_LOG log)
+add_library(drumstick_rime SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../app/src/main/cpp/drumstick_rime.cpp")
+target_compile_features(drumstick_rime PRIVATE cxx_std_17)
+target_include_directories(drumstick_rime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/librime/src")
+target_link_libraries(drumstick_rime PRIVATE "-Wl,--whole-archive" rime-static "-Wl,--no-whole-archive" ${DRUMSTICK_LOG})
+set_target_properties(drumstick_rime PROPERTIES
+  OUTPUT_NAME "drumstick_rime"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/drumstick-out")
+"""
 p.write_text(s)
 PY
 
