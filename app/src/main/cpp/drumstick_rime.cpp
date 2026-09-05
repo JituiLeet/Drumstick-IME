@@ -168,7 +168,7 @@ Java_com_jituileet_inputmethod_RimeNative_nativeSetInput(JNIEnv* env, jclass, jl
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_jituileet_inputmethod_RimeNative_nativeSetAsciiMode(JNIEnv*, jclass, jlong id, jboolean enabled) {
-    if (gApi && gApi->set_option && id) gApi->set_option(static_cast<RimeSessionId>(id), "ascii_mode", enabled ? True : False);
+    if (gApi && gApi->set_option && id) gApi->set_option(static_cast<RimeSessionId>(id), "ascii_mode", enabled ? true : false);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -180,7 +180,7 @@ Java_com_jituileet_inputmethod_RimeNative_nativeGetAsciiMode(JNIEnv*, jclass, jl
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_jituileet_inputmethod_RimeNative_nativeChangePage(JNIEnv*, jclass, jlong id, jboolean backward) {
     if (!gReady || !id || !gApi || !gApi->change_page) return JNI_FALSE;
-    return gApi->change_page(static_cast<RimeSessionId>(id), backward ? True : False) ? JNI_TRUE : JNI_FALSE;
+    return gApi->change_page(static_cast<RimeSessionId>(id), backward ? true : false) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
