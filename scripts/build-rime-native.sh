@@ -35,11 +35,10 @@ s=re.sub(r"(?ms)^\s*target_compile_options\(\s*rime-octagram-objs\s+PRIVATE\s+\"
 p.write_text(s)
 PY
 
-python3 - "$TRIME_CMAKE_FILE" "$DRUM_CPP" <<'PY'
+python3 - "$TRIME_CMAKE_FILE" <<'PY'
 from pathlib import Path
 import sys
-import os
-p=Path(sys.argv[1]); cpp=Path(sys.argv[2]).resolve(); s=p.read_text()
+p=Path(sys.argv[1]); s=p.read_text()
 s=s.replace('cmake_minimum_required(VERSION 3.18.0)', 'cmake_minimum_required(VERSION 3.18.0)\nset(CMAKE_POSITION_INDEPENDENT_CODE ON)')
 s=s.replace('add_subdirectory(librime_jni)', '# Drumstick builds its own JNI bridge below; do not build Trime GPL JNI.')
 if 'add_library(drumstick_rime SHARED' not in s:
@@ -47,7 +46,13 @@ if 'add_library(drumstick_rime SHARED' not in s:
 
 # Drumstick JNI + statically linked librime.
 find_library(DRUMSTICK_LOG log)
-add_library(drumstick_rime SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../app/src/main/cpp/drumstick_rime.cpp")
+if(NOT DEFINED DRUMSTICK_CPP)
+  message(FATAL_ERROR "DRUMSTICK_CPP is not set")
+endif()
+if(NOT EXISTS "${DRUMSTICK_CPP}")
+  message(FATAL_ERROR "Drumstick JNI source not found: ${DRUMSTICK_CPP}")
+endif()
+add_library(drumstick_rime SHARED "${DRUMSTICK_CPP}")
 target_compile_features(drumstick_rime PRIVATE cxx_std_17)
 target_include_directories(drumstick_rime PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/librime/src")
 target_link_libraries(drumstick_rime PRIVATE "-Wl,--whole-archive" rime-static "-Wl,--no-whole-archive" ${DRUMSTICK_LOG})
@@ -70,6 +75,7 @@ build_one() {
   local b="$ROOT/.rime-build/cmake-$abi"
   rm -rf "$b"
   RIME_PLUGINS="" "$CMAKE_BIN" -S "$TRIME_DIR/app/src/main/jni" -B "$b" \
+    -DDRUMSTICK_CPP:FILEPATH="$DRUM_CPP" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
