@@ -82,4 +82,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: drumstick-rime-native
-          path: app/src/main/jniLibs/*/liblibrime.so
+          path: app/src/main/jniLibs/*/libdrumstick_rime.so
